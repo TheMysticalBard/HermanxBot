@@ -1,0 +1,1 @@
+HermanxBot is a Discord bot for importing slack exports in a nice format and managing D&D content on servers.
