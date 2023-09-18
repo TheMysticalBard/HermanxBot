@@ -17,6 +17,7 @@ class RichTextStyle:
 
 class RichTextElement:
     def __init__(self, my_dict: dict):
+        self.style = None
         for key in my_dict:
             setattr(self, key, my_dict[key])
     type: RichTextType
@@ -32,10 +33,16 @@ class RichTextUser(RichTextElement):
     user_id: str
 
 class RichTextEmoji(RichTextElement):
+    def __init__(self, my_dict: dict):
+        super().__init__(my_dict)
+        self.unicode = None
     name: str
     unicode: Optional[str]
 
 class RichTextLink(RichTextElement):
+    def __init__(self, my_dict: dict):
+        super().__init__(my_dict)
+        self.text = None
     url: str
     text: Optional[str]
 

@@ -1,4 +1,5 @@
 import os
+import re
 import discord
 import logging
 import json
@@ -44,6 +45,10 @@ intents.members = True
 
 client = HermanxClient(intents=intents)
 
+def file_to_datetime(filename: str):
+    (year, month, day) = filename.removesuffix(".json").split("-")
+    return datetime(year=int(year), month=int(month), day=int(day))
+
 def decorate(text: str, style: RichTextStyle | None):
     if style is None:
         return text
@@ -79,7 +84,7 @@ def blocks_to_message(blocks: list[dict]):
                     elif element.type == "emoji":
                         element = cast(RichTextEmoji, element)
                         if element.unicode is not None:
-                            element_text = f"\\u{element.unicode}"
+                            element_text = f"{bytes.fromhex(f'{element.unicode:0>8}').decode('latin1')}" # No lol
                         else:
                             element_text = f":{element.name}:"
                     
@@ -97,7 +102,7 @@ def blocks_to_message(blocks: list[dict]):
                         element_text = f"<t:{int(float(element.timestamp))}:f>"
                     
                     elif element.type == "link":
-                        element = cast(RichTextLink, element)
+                        element = RichTextLink(element.__dict__)
                         if element.text is not None:
                             element_text = f"[{element.text}]({element.url})"
                         else:
@@ -124,7 +129,6 @@ def blocks_to_message(blocks: list[dict]):
             logging.debug(block)
     return message_str
 
-
 @client.tree.command(name="import", description="Starts importing slack export into a new category.")
 @app_commands.describe(
     category="The name of the new category"
@@ -139,7 +143,7 @@ async def _import(interaction: discord.Interaction, category: str = "import"):
         text_channel = await import_category.create_text_channel(channel["name"], topic=channel["purpose"]["value"], reason=REASON_STR)
         channel_dir = f"./export/{channel['name']}/"
         day_file_names = [f for f in os.listdir(channel_dir) if f.endswith('.json')]
-        for day_file_name in day_file_names:
+        for day_file_name in sorted(day_file_names, key=file_to_datetime):
             with open(f"{channel_dir}/{day_file_name}") as day_file_json:
                 FILE = json.load(day_file_json)
             for message in FILE:
@@ -147,10 +151,17 @@ async def _import(interaction: discord.Interaction, category: str = "import"):
                     break
                 
                 user = USERS[message['user']]
-                user_str = f"{user['name']} ({user['real_name']})"
+                user_str = f"{user['real_name']} ({user['name']})"
                 ts = datetime.fromtimestamp(float(message['ts']))
                 if "blocks" in message:
                     message_str = blocks_to_message(message["blocks"])
+                elif "subtype" in message and message["subtype"] == "channel_join":
+                    user_pattern = re.compile("(?:<@)(U[0-9A-Z]+)(?:>)")
+                    user_match = re.search(user_pattern, message['text'])
+                    if user_match:
+                        message_str = f"@{user_pattern.sub(USERS[user_match.group(1)]['name'], message['text'])}"
+                    else:
+                        message_str = message['text']
                 else:
                     message_str = message['text']
                 message_embed = discord.Embed(
@@ -158,25 +169,26 @@ async def _import(interaction: discord.Interaction, category: str = "import"):
                     type="rich",
                     timestamp=ts)\
                     .set_author(name=user_str)\
-                    .add_field(name='\u200B', value=message_str)
+                    .add_field(name="", value=message_str)
                 
                 if "files" in message:
                     message_embed.set_image(url=message["files"][0]["url_private"])
                 
                 if "attachments" in message:
-                    message_embed.set_image(url=message["attachments"])
+                    message_embed.set_image(url=message["attachments"][0]["from_url"])
 
                 await text_channel.send(embed=message_embed)
-            break # DEV
+            # break # DEV
         break # DEV
 
     await interaction.followup.send(f"{interaction.user.mention}, importing completed.", ephemeral=True)
 
-@client.tree.command(name="delete-category", description="Deletes the first category matching parameter, including channels inside.")
+@client.tree.command(name="delete-categories", description="Deletes categories matching parameter, including channels inside.")
 @app_commands.describe(
-    category="The name of the category to delete"
+    category="The name of the category to delete",
+    limit="The number of categories to delete (-1 for all)"
 )
-async def delete_category(interaction: discord.Interaction, category: str):
+async def delete_categories(interaction: discord.Interaction, category: str, limit: int = -1):
     if category == "" or category is None:
         await interaction.response.send_message("Category name must be supplied, quitting.", ephemeral=True)
         return
@@ -191,15 +203,16 @@ async def delete_category(interaction: discord.Interaction, category: str):
     num_channels = 0
 
     for cat in interaction.guild.categories:
+        if limit == 0:
+            break
         if cat.name == category:
-            cat_found = True
-            num_channels = len(cat.channels)
+            limit -= 1
+            num_channels += len(cat.channels)
             for channel in cat.channels:
                 await channel.delete(reason=REASON_STR)
             await cat.delete(reason=REASON_STR)
-            break
     
-    await interaction.followup.send(f"{interaction.user.mention}, category {category} with {num_channels} channels deleted.", ephemeral=True)
+    await interaction.followup.send(f"{interaction.user.mention}, categories named {category} and a total of {num_channels} channels deleted.", ephemeral=True)
 
 @client.event
 async def on_ready():
