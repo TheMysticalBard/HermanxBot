@@ -1,3 +1,5 @@
 private.json
 bot-env
 *.log
+export
+__pycache__
