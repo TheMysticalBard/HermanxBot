@@ -10,6 +10,13 @@ class Block:
     type: BlockType
 
 class RichTextStyle:
+    def __init__(self, my_dict: dict):
+        self.bold = None
+        self.italic = None
+        self.strike = None
+        self.code = None
+        for key in my_dict:
+            setattr(self, key, my_dict[key])
     bold: Optional[bool]
     italic: Optional[bool]
     strike: Optional[bool]
@@ -61,5 +68,8 @@ class RichTextBroadcast(RichTextElement):
 class RichTextSection(Block):
     elements: List[RichTextElement]
 
-class RichTextBlock(Block):
+class RichTextList(Block):
     elements: List[RichTextSection]
+
+class RichTextBlock(Block):
+    elements: List[RichTextSection | RichTextList]
