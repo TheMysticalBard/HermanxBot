@@ -231,7 +231,7 @@ class SettingsView(discord.ui.View):
     @discord.ui.select(cls=discord.ui.Select, options=select_options)
     async def on_submit(self, interaction: discord.Interaction, select: discord.ui.Select):
         global USERS
-        port_mentions = bool(select.values[0])
+        port_mentions = select.values[0] == "True"
         if port_mentions:
             user_list = []
             for user_id in USERS.keys():
@@ -241,7 +241,7 @@ class SettingsView(discord.ui.View):
             self.remove_item(select)
             await interaction.response.edit_message(content=f"First user: {user_list[0]}", view=None)
         else:
-            slack_import(interaction, self.category_name)
+            await slack_import(interaction, self.category_name)
 
 intents = discord.Intents.default()
 intents.message_content = True
